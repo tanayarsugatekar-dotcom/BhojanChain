@@ -1,0 +1,151 @@
+{
+ "city": "Belagavi",
+ "also_called": "Belgaum",
+ "note": "Area centres are approximate (about 1 km). Users can paste an exact pin from a map.",
+ "bbox": {
+  "lat": [
+   15.7,
+   16.0
+  ],
+  "lng": [
+   74.35,
+   74.7
+  ]
+ },
+ "max_pin_distance_km": 6,
+ "areas": [
+  {
+   "name": "Khade Bazaar / Fort",
+   "lat": 15.8535,
+   "lng": 74.503
+  },
+  {
+   "name": "Kapileshwar Road",
+   "lat": 15.844,
+   "lng": 74.504
+  },
+  {
+   "name": "Camp",
+   "lat": 15.864,
+   "lng": 74.518
+  },
+  {
+   "name": "Ashok Nagar",
+   "lat": 15.856,
+   "lng": 74.516
+  },
+  {
+   "name": "Tilakwadi",
+   "lat": 15.839,
+   "lng": 74.513
+  },
+  {
+   "name": "Hindwadi",
+   "lat": 15.83,
+   "lng": 74.52
+  },
+  {
+   "name": "Shahapur",
+   "lat": 15.833,
+   "lng": 74.496,
+   "aliases": [
+    "Shahpur",
+    "Shahapura"
+   ]
+  },
+  {
+   "name": "Khasbag",
+   "lat": 15.8385,
+   "lng": 74.499,
+   "aliases": [
+    "Khasbagh",
+    "Khas Bag"
+   ]
+  },
+  {
+   "name": "Vadgaon",
+   "lat": 15.824,
+   "lng": 74.488
+  },
+  {
+   "name": "Angol",
+   "lat": 15.82,
+   "lng": 74.506
+  },
+  {
+   "name": "Udyambag",
+   "lat": 15.809,
+   "lng": 74.501
+  },
+  {
+   "name": "Khanapur Road",
+   "lat": 15.846,
+   "lng": 74.485
+  },
+  {
+   "name": "Sadashiv Nagar",
+   "lat": 15.87,
+   "lng": 74.51
+  },
+  {
+   "name": "Mahantesh Nagar",
+   "lat": 15.878,
+   "lng": 74.523
+  },
+  {
+   "name": "Bauxite Road",
+   "lat": 15.872,
+   "lng": 74.523
+  },
+  {
+   "name": "Gandhinagar",
+   "lat": 15.859,
+   "lng": 74.533
+  },
+  {
+   "name": "Nehru Nagar",
+   "lat": 15.879,
+   "lng": 74.533
+  },
+  {
+   "name": "Rani Chennamma Nagar",
+   "lat": 15.883,
+   "lng": 74.513
+  },
+  {
+   "name": "Ramtirth Nagar",
+   "lat": 15.883,
+   "lng": 74.502
+  },
+  {
+   "name": "Ganeshpur",
+   "lat": 15.87,
+   "lng": 74.49
+  },
+  {
+   "name": "Hindalga",
+   "lat": 15.886,
+   "lng": 74.478
+  },
+  {
+   "name": "Kangrali",
+   "lat": 15.794,
+   "lng": 74.5
+  },
+  {
+   "name": "Kanbargi",
+   "lat": 15.806,
+   "lng": 74.542
+  },
+  {
+   "name": "Peeranwadi",
+   "lat": 15.873,
+   "lng": 74.541
+  },
+  {
+   "name": "Sambra (Airport Road)",
+   "lat": 15.8593,
+   "lng": 74.6183
+  }
+ ]
+}

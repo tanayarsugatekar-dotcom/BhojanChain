@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BhojanChain Belagavi</title>
+  <meta name="theme-color" content="#1f6f3f">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icon-192.png">
+  <link rel="apple-touch-icon" href="icon-180.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="BhojanChain">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand"><span class="logo">🍲</span><div><b>BhojanChain</b><small>Surplus food in Belagavi → people who need it</small></div></div>
+    <div class="chips">
+      <button id="locBtn" class="chip" title="Change location">📍 <span id="locLabel">Set location</span></button>
+      <button id="meBtn" class="chip" title="Your profile">👤 <span id="meLabel">Sign up</span></button>
+    </div>
+  </header>
+
+  <nav class="tabs" id="tabs" role="tablist">
+    <button data-tab="find" class="on">🔎 Find food</button>
+    <button data-tab="share">➕ Share food</button>
+    <button data-tab="activity">📋 My activity</button>
+    <button data-tab="network">🤝 Nearby network</button>
+    <button data-tab="ride">🛵 Ride cost</button>
+    <button data-tab="guide">⏳ Shelf-life guide</button>
+  </nav>
+
+  <main id="view" aria-live="polite"></main>
+
+  <dialog id="dlg"><div id="dlgBody"></div></dialog>
+  <div id="toast" role="status"></div>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+  <script>if ('serviceWorker' in navigator && location.protocol !== 'file:') window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));</script>
+</body>
+</html>

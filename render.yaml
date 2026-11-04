@@ -1,0 +1,17 @@
+# Render blueprint. A persistent disk needs a paid instance type on Render.
+services:
+  - type: web
+    name: bhojanchain
+    runtime: docker
+    plan: starter
+    autoDeploy: true          # every git push redeploys automatically
+    healthCheckPath: /api/health
+    disk:
+      name: bhojan-data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: BHOJAN_DB
+        value: /data/bhojanchain.db
+      - key: BHOJAN_SEED
+        value: "0"
