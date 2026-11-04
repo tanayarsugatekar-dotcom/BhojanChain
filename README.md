@@ -32,4 +32,4 @@ Shelf-life values are guidance only. Always check smell, look and texture before
 
 ## Accounts and sharing data between phones
 Accounts use mobile number + password (stored hashed). Data lives on the server, so all phones share it and the app refreshes itself every 15 seconds.
-See `DEPLOY.md` to put the server online (free laptop tunnel or a host with a persistent disk).
+See `DEPLOY.md` to put the server online (free laptop tunnel, PythonAnywhere, or a host with a persistent disk).

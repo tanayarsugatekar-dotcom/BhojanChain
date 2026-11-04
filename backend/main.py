@@ -397,11 +397,15 @@ async def http_error(request: Request, exc: HTTPException):
 
 @asynccontextmanager
 async def lifespan(app):
+    initialize_app()
+    yield
+
+
+def initialize_app():
     init_db()
     if os.environ.get("BHOJAN_SEED", "1") == "1":
         from seed import seed_if_empty
         seed_if_empty()
-    yield
 
 
 routes = [

@@ -12,7 +12,38 @@ and new listings appear on other phones within about 15 seconds without refreshi
 The laptop must stay on and online. Data is saved in `backend/bhojanchain.db` on the laptop.
 (Set `BHOJAN_SEED=0` first if you do not want the demo listings.)
 
-## Option B: always-on hosting with auto-deploy (Render, Railway or Fly.io)
+## Option B: no-card hosting with PythonAnywhere
+PythonAnywhere's free Beginner account can keep the SQLite database on its persistent home directory and serves the app over HTTPS. Its free plan has limited daily CPU and storage, so it is best for a small demo rather than a high-traffic production service.
+
+1. Create a free Beginner account at [pythonanywhere.com](https://www.pythonanywhere.com/registration/register/beginner/), then open a Bash console.
+2. Clone this repository into your home directory (or upload the project files). In the console:
+   ```
+   git clone https://github.com/tanayasugatekar/bhojanchain.git
+   cd ~/bhojanchain
+   mkvirtualenv --python=/usr/bin/python3.13 bhojanchain
+   pip install -r requirements.txt
+   ```
+   If the repository is private, use PythonAnywhere's GitHub authentication to clone it, or upload the files from the private repository.
+3. In the **Web** tab, add a web app using **Manual configuration** and the same Python version as the virtualenv.
+4. Set the web app's virtualenv to `/home/<your-username>/.virtualenvs/bhojanchain`.
+5. Edit the WSGI configuration file linked in the Web tab. Replace its contents with:
+   ```
+   import os
+   import sys
+
+   project = "/home/<your-username>/bhojanchain/backend"
+   if project not in sys.path:
+       sys.path.insert(0, project)
+
+   os.environ["BHOJAN_SEED"] = "0"
+   from wsgi import application
+   ```
+   Replace `<your-username>` with your PythonAnywhere username.
+6. Click **Reload** in the Web tab and open `https://<your-username>.pythonanywhere.com/api/health`. A healthy service returns `{"status":"ok"}`. Then open the same address without `/api/health` to install the app on phones.
+
+The SQLite database is stored at `backend/bhojanchain.db` in your home directory and persists across app reloads. Back it up regularly. PythonAnywhere free accounts have a daily CPU allowance and restricted outbound access; this app serves its frontend and API from one address and does not require server-side calls to third-party APIs.
+
+## Option C: paid always-on hosting with auto-deploy (Render, Railway or Fly.io)
 1. Put this folder on GitHub.
 2. Create a web service from the repo using the `Dockerfile` (on Render, "New > Blueprint" reads `render.yaml`).
 3. Attach a persistent disk/volume mounted at `/data`. Without it the database is wiped on every restart or deploy.
