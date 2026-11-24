@@ -13,6 +13,7 @@ class OrgCreate(BaseModel):
     kind: OrgKind
     phone: str = Field(min_length=7, max_length=20)
     password: str = Field(min_length=6, max_length=72)
+    otp: str = Field(default="", max_length=6)
     area: str = Field(min_length=2, max_length=60)  # one of the Belagavi areas
     address: str = Field(default="", max_length=200)  # street / shop / landmark
     pincode: Optional[str] = Field(default=None, max_length=6)
@@ -43,4 +44,20 @@ class ClaimCreate(BaseModel):
 
 class LoginRequest(BaseModel):
     phone: str = Field(min_length=7, max_length=20)
+    password: str = Field(default="", max_length=72)
+    otp: str = Field(default="", min_length=0, max_length=6)
+
+
+class OTPRequest(BaseModel):
+    phone: str = Field(min_length=7, max_length=20)
+    purpose: Literal["signup", "login"] = "login"
+
+
+class OTPVerifyRequest(BaseModel):
+    phone: str = Field(min_length=7, max_length=20)
+    otp: str = Field(min_length=6, max_length=6)
+
+
+class AdminLoginRequest(BaseModel):
+    username: str = Field(min_length=1, max_length=80)
     password: str = Field(min_length=1, max_length=72)

@@ -260,6 +260,45 @@ def test_unknown_phone_and_short_password(client):
     assert client.post("/api/orgs", json=_org(phone="12345678")).status_code == 422
 
 
+def test_valid_phone_and_dev_otp_signup_and_login(client, monkeypatch):
+    monkeypatch.setenv("BHOJAN_OTP_REQUIRED", "1")
+    monkeypatch.setenv("BHOJAN_OTP_DEV", "1")
+
+    bad = client.post("/api/otp/request", json={"phone": "1234567890", "purpose": "signup"})
+    assert bad.status_code == 422
+
+    sent = client.post("/api/otp/request", json={"phone": "+91 9820011223", "purpose": "signup"})
+    assert sent.status_code == 200
+    code = sent.json()["dev_otp"]
+    registered = client.post("/api/orgs", json=_org(otp=code))
+    assert registered.status_code == 201
+
+    login_sent = client.post("/api/otp/request", json={"phone": "9820011223", "purpose": "login"})
+    login_code = login_sent.json()["dev_otp"]
+    logged_in = client.post("/api/login", json={"phone": "9820011223", "otp": login_code})
+    assert logged_in.status_code == 200
+    assert logged_in.json()["id"] == registered.json()["id"]
+
+
+def test_admin_can_list_and_delete_account(client, monkeypatch):
+    monkeypatch.setenv("BHOJAN_ADMIN_USERNAME", "admin")
+    monkeypatch.setenv("BHOJAN_ADMIN_PASSWORD", "admin-secret")
+    account = client.post("/api/orgs", json=_org(name="Delete Me")).json()
+
+    denied = client.get("/api/admin/accounts")
+    assert denied.status_code == 401
+    login = client.post("/api/admin/login", json={"username": "admin", "password": "admin-secret"})
+    assert login.status_code == 200
+    headers = {"X-Admin-Token": login.json()["token"]}
+
+    accounts = client.get("/api/admin/accounts", headers=headers).json()
+    assert any(a["id"] == account["id"] for a in accounts)
+    deleted = client.delete(f"/api/admin/accounts/{account['id']}", headers=headers)
+    assert deleted.status_code == 200
+    assert deleted.json()["status"] == "deleted"
+    assert client.get("/api/admin/accounts", headers=headers).json() == []
+
+
 def test_passwords_are_not_stored_plain(client):
     client.post("/api/orgs", json=_org())
     from db import connect

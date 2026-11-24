@@ -39,6 +39,7 @@ PythonAnywhere's free Beginner account can keep the SQLite database on its persi
    from wsgi import application
    ```
    Replace `<your-username>` with your PythonAnywhere username.
+   The supplied WSGI adapter creates its event loop inside each uWSGI worker.
 6. Click **Reload** in the Web tab and open `https://<your-username>.pythonanywhere.com/api/health`. A healthy service returns `{"status":"ok"}`. Then open the same address without `/api/health` to install the app on phones.
 
 The SQLite database is stored at `backend/bhojanchain.db` in your home directory and persists across app reloads. Back it up regularly. PythonAnywhere free accounts have a daily CPU allowance and restricted outbound access; this app serves its frontend and API from one address and does not require server-side calls to third-party APIs.
@@ -60,5 +61,14 @@ The SQLite database is stored at `backend/bhojanchain.db` in your home directory
 
 ## Good to know
 - Back up by copying the `bhojanchain.db` file (it is the whole database).
-- Passwords are stored hashed (scrypt). There is no SMS, so "forgot password" means an admin must reset the account.
+- Passwords are stored hashed (scrypt). "Forgot password" can be handled through OTP login until a dedicated reset flow is added.
 - Using only the web files on Netlify or similar: edit `frontend/config.js` and set `window.BHOJAN_API` to the server's address.
+
+## OTP and admin configuration
+Set these environment variables in the PythonAnywhere web app configuration for real OTP and admin access:
+
+- `BHOJAN_OTP_REQUIRED=1` requires an OTP when creating an account or logging in with OTP.
+- `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER` enable SMS delivery through Twilio.
+- `BHOJAN_ADMIN_USERNAME` and `BHOJAN_ADMIN_PASSWORD` protect the admin account-management screen.
+
+For local testing only, set `BHOJAN_OTP_DEV=1`; the OTP request response includes the test OTP.

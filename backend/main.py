@@ -5,9 +5,10 @@ The web app in ../frontend is served from the same server at http://localhost:80
 """
 import os
 import random
+import secrets
 import uuid
 from contextlib import asynccontextmanager
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -22,11 +23,28 @@ from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 
 import shelf_life as sl
-from auth import clear_failures, hash_password, record_failure, too_many_failures, verify_password
+from auth import (
+    clear_failures,
+    hash_password,
+    normalize_indian_phone,
+    otp_hash,
+    record_failure,
+    send_sms,
+    too_many_failures,
+    verify_password,
+)
 from db import connect, init_db, parse_ts, phone_key, utcnow
 from areas import AREAS, DATA as AREA_DATA, AddressError, resolve_address
 from geo import haversine_km
-from schemas import DONOR_KINDS, ClaimCreate, ListingCreate, LoginRequest, OrgCreate
+from schemas import (
+    AdminLoginRequest,
+    DONOR_KINDS,
+    ClaimCreate,
+    ListingCreate,
+    LoginRequest,
+    OTPRequest,
+    OrgCreate,
+)
 
 FRONTEND = Path(__file__).resolve().parent.parent / "frontend"
 KINDS = {"MARKET_VENDOR", "WEDDING_VENUE", "RESTAURANT", "NGO", "INDIVIDUAL"}
@@ -73,6 +91,43 @@ def q_choice(request: Request, name: str, choices, default=None):
 
 def token_of(request: Request) -> Optional[str]:
     return request.headers.get("x-org-token")
+
+
+def otp_required() -> bool:
+    return os.environ.get("BHOJAN_OTP_REQUIRED", "0").lower() in ("1", "true", "yes", "on")
+
+
+def verify_otp(phone: str, code: str) -> bool:
+    key = phone_key(normalize_indian_phone(phone))
+    with connect() as c:
+        row = c.execute("SELECT * FROM otp_requests WHERE phone_key=?", (key,)).fetchone()
+        if not row:
+            return False
+        if datetime.fromisoformat(row["expires_at"]) <= datetime.now(timezone.utc):
+            c.execute("DELETE FROM otp_requests WHERE phone_key=?", (key,))
+            return False
+        if row["attempts"] >= 5:
+            return False
+        c.execute("UPDATE otp_requests SET attempts=attempts+1 WHERE phone_key=?", (key,))
+        if otp_hash(code) != row["code_hash"]:
+            return False
+        c.execute("DELETE FROM otp_requests WHERE phone_key=?", (key,))
+        return True
+
+
+_ADMIN_TOKENS: dict[str, float] = {}
+
+
+def admin_token_of(request: Request) -> Optional[str]:
+    token = request.headers.get("x-admin-token")
+    if token and _ADMIN_TOKENS.get(token, 0) > datetime.now(timezone.utc).timestamp():
+        return token
+    return None
+
+
+def require_admin(request: Request):
+    if not admin_token_of(request):
+        raise HTTPException(401, "Admin login required")
 
 
 def auth(conn, org_id: str, request: Request):
@@ -166,19 +221,23 @@ async def areas(request: Request):
 async def register(request: Request):
     p = await read_body(request, OrgCreate)
     try:
+        normalized_phone = normalize_indian_phone(p.phone)
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    if otp_required() and not verify_otp(normalized_phone, p.otp):
+        raise HTTPException(401, "Enter the correct 6-digit OTP sent to your mobile number")
+    try:
         address, lat, lng = resolve_address(p.area, p.address, p.pincode, p.lat, p.lng, p.kind in DONOR_KINDS)
     except AddressError as e:
         raise HTTPException(422, str(e))
     oid, token = new_id("org"), uuid.uuid4().hex
-    key = phone_key(p.phone)
-    if len(key) < 10:
-        raise HTTPException(422, "Enter a full 10-digit mobile number")
+    key = phone_key(normalized_phone)
     with connect() as c:
         if c.execute("SELECT 1 FROM orgs WHERE phone_key=?", (key,)).fetchone():
             raise HTTPException(409, "This phone number already has an account. Log in instead.")
         c.execute("INSERT INTO orgs (id, token, name, kind, phone, address, lat, lng, created_at, pw_hash, phone_key) "
                   "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-                  (oid, token, p.name.strip(), p.kind, p.phone.strip(), address,
+                  (oid, token, p.name.strip(), p.kind, normalized_phone, address,
                    lat, lng, utcnow().isoformat(), hash_password(p.password), key))
         row = c.execute("SELECT * FROM orgs WHERE id=?", (oid,)).fetchone()
     return JSONResponse({**public_org(row), "phone": row["phone"], "token": token,
@@ -187,17 +246,94 @@ async def register(request: Request):
 
 async def login(request: Request):
     p = await read_body(request, LoginRequest)
-    key = phone_key(p.phone)
+    try:
+        normalized_phone = normalize_indian_phone(p.phone)
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    key = phone_key(normalized_phone)
     if too_many_failures(key):
         raise HTTPException(429, "Too many wrong attempts. Try again in 10 minutes.")
     with connect() as c:
         row = c.execute("SELECT * FROM orgs WHERE phone_key=? AND phone_key != ''", (key,)).fetchone()
-    if not row or not row["pw_hash"] or not verify_password(p.password, row["pw_hash"]):
+    otp_ok = bool(p.otp) and verify_otp(normalized_phone, p.otp)
+    password_ok = bool(p.password) and row and row["pw_hash"] and verify_password(p.password, row["pw_hash"])
+    if not row or not (otp_ok or password_ok):
         record_failure(key)
         raise HTTPException(401, "Phone number or password is wrong")
     clear_failures(key)
     return JSONResponse({**public_org(row), "phone": row["phone"], "token": row["token"],
                          "can_donate": row["kind"] in DONOR_KINDS})
+
+
+async def request_otp(request: Request):
+    p = await read_body(request, OTPRequest)
+    try:
+        phone = normalize_indian_phone(p.phone)
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    key = phone_key(phone)
+    with connect() as c:
+        exists = c.execute("SELECT 1 FROM orgs WHERE phone_key=?", (key,)).fetchone()
+    if p.purpose == "signup" and exists:
+        raise HTTPException(409, "This phone number already has an account. Log in instead.")
+    if p.purpose == "login" and not exists:
+        raise HTTPException(404, "No account found for this phone number")
+
+    code = f"{secrets.randbelow(1000000):06d}"
+    expires = datetime.now(timezone.utc) + timedelta(minutes=10)
+    with connect() as c:
+        c.execute("INSERT INTO otp_requests (phone_key, code_hash, expires_at, attempts) "
+                  "VALUES (?, ?, ?, 0) "
+                  "ON CONFLICT(phone_key) DO UPDATE SET code_hash=excluded.code_hash, "
+                  "expires_at=excluded.expires_at, attempts=0",
+                  (key, otp_hash(code), expires.isoformat()))
+
+    sms_sent = send_sms(phone, f"Your BhojanChain login code is {code}. It expires in 10 minutes.")
+    result = {"status": "sent"}
+    if sms_sent:
+        return JSONResponse(result)
+    if os.environ.get("BHOJAN_OTP_DEV", "0").lower() in ("1", "true", "yes", "on"):
+        result["dev_otp"] = code
+        return JSONResponse(result)
+    raise HTTPException(503, "SMS OTP is not configured. Add Twilio settings in the server environment.")
+
+
+async def admin_login(request: Request):
+    p = await read_body(request, AdminLoginRequest)
+    username = os.environ.get("BHOJAN_ADMIN_USERNAME", "")
+    password = os.environ.get("BHOJAN_ADMIN_PASSWORD", "")
+    if not username or not password or p.username != username or p.password != password:
+        raise HTTPException(401, "Wrong admin username or password")
+    token = secrets.token_urlsafe(32)
+    _ADMIN_TOKENS[token] = datetime.now(timezone.utc).timestamp() + 8 * 3600
+    return JSONResponse({"token": token})
+
+
+async def admin_accounts(request: Request):
+    require_admin(request)
+    with connect() as c:
+        rows = c.execute("SELECT id, name, kind, phone, address, lat, lng, created_at FROM orgs "
+                         "ORDER BY created_at DESC").fetchall()
+        out = []
+        for r in rows:
+            listings = c.execute("SELECT COUNT(*) FROM listings WHERE org_id=?", (r["id"],)).fetchone()[0]
+            claims = c.execute("SELECT COUNT(*) FROM claims WHERE org_id=?", (r["id"],)).fetchone()[0]
+            out.append({**dict(r), "listing_count": listings, "claim_count": claims})
+    return JSONResponse(out)
+
+
+async def admin_delete_account(request: Request):
+    require_admin(request)
+    org_id = request.path_params["org_id"]
+    with connect() as c:
+        row = c.execute("SELECT id, name FROM orgs WHERE id=?", (org_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, "Account not found")
+        c.execute("DELETE FROM claims WHERE org_id=?", (org_id,))
+        c.execute("DELETE FROM claims WHERE listing_id IN (SELECT id FROM listings WHERE org_id=?)", (org_id,))
+        c.execute("DELETE FROM listings WHERE org_id=?", (org_id,))
+        c.execute("DELETE FROM orgs WHERE id=?", (org_id,))
+    return JSONResponse({"status": "deleted", "name": row["name"]})
 
 
 async def nearby_orgs(request: Request):
@@ -414,6 +550,10 @@ routes = [
     Route("/api/areas", areas),
     Route("/api/orgs", register, methods=["POST"]),
     Route("/api/login", login, methods=["POST"]),
+    Route("/api/otp/request", request_otp, methods=["POST"]),
+    Route("/api/admin/login", admin_login, methods=["POST"]),
+    Route("/api/admin/accounts", admin_accounts),
+    Route("/api/admin/accounts/{org_id}", admin_delete_account, methods=["DELETE"]),
     Route("/api/orgs/nearby", nearby_orgs),
     Route("/api/orgs/{org_id}/listings", org_listings, methods=["GET", "POST"]),
     Route("/api/orgs/{org_id}/listings/{listing_id}/close", close_listing, methods=["POST"]),

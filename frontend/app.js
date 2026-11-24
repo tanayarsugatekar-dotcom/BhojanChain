@@ -25,6 +25,7 @@ const S = {
   areas: [],
   ride: { from: '', to: '', kg: 20 },
   me: store.get('bc_me', null),
+  admin: store.get('bc_admin', null),
   loc: store.get('bc_loc', null),
   tab: 'find',
   f: { radius: 10, group: '', veg: false, free: false, sort: 'auto' },
@@ -35,6 +36,7 @@ const S = {
 async function api(path, opts = {}) {
   const headers = { 'Content-Type': 'application/json' };
   if (S.me) headers['X-Org-Token'] = S.me.token;
+  if (S.admin) headers['X-Admin-Token'] = S.admin;
   let r;
   try { r = await fetch(API + path, { ...opts, headers }); }
   catch { throw new Error('Cannot reach the server. Check your connection.'); }
@@ -184,7 +186,8 @@ function openSignup() {
       <form id="su"><p class="small" style="margin-top:0"><b>Who are you?</b></p>
       <div class="seg" id="kinds">${Object.entries(KIND).map(([k, v]) => `<button type="button" data-k="${k}" class="${k === kind ? 'on' : ''}"><span style="font-size:1.4rem">${v.icon}</span><br><b>${v.label}</b><br><span class="hint">${v.donor ? 'I have surplus food to give' : 'I need food'}</span></button>`).join('')}</div>
       <div class="f" style="margin-top:14px"><label for="n">Name</label><input id="n" required minlength="2" maxlength="80" placeholder="Shop, venue, NGO or your name"></div>
-      <div class="f"><label for="p">Mobile number</label><input id="p" required type="tel" minlength="10" maxlength="20" autocomplete="tel" placeholder="+91 98xxxxxxxx"></div>
+      <div class="f"><label for="p">Mobile number</label><input id="p" required type="tel" minlength="10" maxlength="20" pattern="(?:\\+91[ -]?)?[6-9][0-9]{9}" autocomplete="tel" placeholder="+91 98xxxxxxxx"></div>
+      <div class="row"><button type="button" class="btn ghost sm" id="otp">Send OTP</button><div class="f" style="flex:1;margin:0"><label for="suotp">6-digit OTP</label><input id="suotp" type="text" inputmode="numeric" maxlength="6" pattern="[0-9]{6}" placeholder="123456"></div></div>
       <div class="f"><label for="pw">Create a password (6+ characters)</label><input id="pw" required type="password" minlength="6" maxlength="72" autocomplete="new-password"></div>
       <div class="f"><label for="ar">Area of Belagavi</label><select id="ar" required><option value="">Choose your area…</option>${S.areas.map(a => `<option ${S.loc && S.loc.label === a.name ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}</select></div>
       <div class="f"><label for="a" id="aLbl">Address (optional)</label><input id="a" maxlength="120" placeholder="Shop / house no., street, nearest landmark"></div>
@@ -204,10 +207,21 @@ function openSignup() {
     $$('#kinds button', b).forEach(x => x.onclick = () => { kind = x.dataset.k; refresh(); });
     refresh();
     $('#cx', b).onclick = closeDlg;
+    $('#otp', b).onclick = async () => {
+      const phone = $('#p', b).value.trim();
+      if (!phone) return toast('Enter your mobile number first', true);
+      $('#otp', b).disabled = true;
+      try {
+        const r = await api('/otp/request', { method: 'POST', body: JSON.stringify({ phone, purpose: 'signup' }) });
+        toast(r.dev_otp ? `Development OTP: ${r.dev_otp}` : 'OTP sent to your mobile number');
+        $('#suotp', b).focus();
+      } catch (err) { toast(err.message, true); }
+      $('#otp', b).disabled = false;
+    };
     $('#su', b).onsubmit = async e => {
       e.preventDefault();
       try {
-        const area = $('#ar', b).value, raw = $('#pp', b).value.trim(), body = { name: $('#n', b).value, kind, phone: $('#p', b).value, password: $('#pw', b).value, area, address: $('#a', b).value, pincode: $('#pin', b).value.trim() || null };
+        const area = $('#ar', b).value, raw = $('#pp', b).value.trim(), body = { name: $('#n', b).value, kind, phone: $('#p', b).value, password: $('#pw', b).value, otp: $('#suotp', b).value, area, address: $('#a', b).value, pincode: $('#pin', b).value.trim() || null };
         if (raw) {
           const m = raw.match(/^\s*(-?\d+(?:\.\d+)?)\s*[, ]\s*(-?\d+(?:\.\d+)?)\s*$/);
           if (!m) return toast('Map pin must look like 15.8497, 74.4977', true);
@@ -226,17 +240,30 @@ function startSession(o, area) {
 }
 function openLogin() {
   const b = openDlg(`<h2>Log in</h2>
-    <form id="li"><div class="f"><label for="lp">Mobile number</label><input id="lp" required type="tel" autocomplete="tel" placeholder="+91 98xxxxxxxx"></div>
-      <div class="f"><label for="lw">Password</label><input id="lw" required type="password" autocomplete="current-password"></div>
+    <form id="li"><div class="f"><label for="lp">Mobile number</label><input id="lp" required type="tel" pattern="(?:\\+91[ -]?)?[6-9][0-9]{9}" autocomplete="tel" placeholder="+91 98xxxxxxxx"></div>
+      <div class="row"><button type="button" class="btn ghost sm" id="logotp">Send OTP</button><div class="f" style="flex:1;margin:0"><label for="lw">Password or 6-digit OTP</label><input id="lw" required autocomplete="one-time-code" placeholder="Password / OTP"></div></div>
       <div class="row"><button type="button" class="btn ghost" id="cx">Cancel</button><button class="btn" id="lgo">Log in</button></div>
       <p class="small" style="text-align:center;margin:12px 0 0">New here? <a href="#" id="toSignup">Create an account</a></p>
-      <p class="hint" style="text-align:center">Forgot your password? Ask the BhojanChain admin to reset it.</p></form>`);
+      <p class="hint" style="text-align:center">Use an OTP or your existing password. Forgot your password? Contact the BhojanChain admin.</p>
+      <p class="small" style="text-align:center"><a href="#" id="toAdmin">Admin login</a></p></form>`);
   $('#cx', b).onclick = closeDlg;
   $('#toSignup', b).onclick = e => { e.preventDefault(); openSignup(); };
+  $('#toAdmin', b).onclick = e => { e.preventDefault(); openAdminLogin(); };
+  $('#logotp', b).onclick = async () => {
+    $('#logotp', b).disabled = true;
+    try {
+      const r = await api('/otp/request', { method: 'POST', body: JSON.stringify({ phone: $('#lp', b).value, purpose: 'login' }) });
+      toast(r.dev_otp ? `Development OTP: ${r.dev_otp}` : 'OTP sent to your mobile number');
+      $('#lw', b).focus();
+    } catch (err) { toast(err.message, true); }
+    $('#logotp', b).disabled = false;
+  };
   $('#li', b).onsubmit = async e => {
     e.preventDefault(); $('#lgo', b).disabled = true;
     try {
-      const o = await api('/login', { method: 'POST', body: JSON.stringify({ phone: $('#lp', b).value, password: $('#lw', b).value }) });
+      const value = $('#lw', b).value;
+      const body = /^[0-9]{6}$/.test(value) ? { phone: $('#lp', b).value, otp: value } : { phone: $('#lp', b).value, password: value };
+      const o = await api('/login', { method: 'POST', body: JSON.stringify(body) });
       startSession(o); updateHeader(); closeDlg(); toast(`Welcome back, ${o.name}!`); S.tab = KIND[o.kind].donor ? 'activity' : 'find'; syncTabs(); render();
     } catch (err) { toast(err.message, true); $('#lgo', b).disabled = false; }
   };
@@ -246,9 +273,55 @@ function openProfile() {
   const b = openDlg(`<h2>${KIND[S.me.kind].icon} ${esc(S.me.name)}</h2>
     <p class="muted">${KIND[S.me.kind].label} · ${esc(S.me.phone)}${S.me.address ? '<br>📍 ' + esc(S.me.address) : ''}</p>
     <p class="hint">Your account is saved on the server. Log out here and log in again any time, on any phone, with your mobile number and password.</p>
+    ${S.admin ? '<p><button class="btn ghost sm" id="adminPanel">Open admin accounts</button></p>' : ''}
     <div class="row"><button class="btn ghost" id="cx">Close</button><button class="btn danger" id="out">Log out</button></div>`);
   $('#cx', b).onclick = closeDlg;
+  if ($('#adminPanel', b)) $('#adminPanel', b).onclick = openAdminPanel;
   $('#out', b).onclick = () => { S.me = null; store.del('bc_me'); updateHeader(); closeDlg(); render(); toast('Logged out'); };
+}
+
+function openAdminLogin() {
+  const b = openDlg(`<h2>Admin login</h2>
+    <form id="al">
+      <div class="f"><label for="au">Admin username</label><input id="au" required autocomplete="username"></div>
+      <div class="f"><label for="aw">Password</label><input id="aw" required type="password" autocomplete="current-password"></div>
+      <div class="row"><button type="button" class="btn ghost" id="cx">Cancel</button><button class="btn">Log in as admin</button></div>
+    </form>`);
+  $('#cx', b).onclick = closeDlg;
+  $('#al', b).onsubmit = async e => {
+    e.preventDefault();
+    try {
+      const r = await api('/admin/login', { method: 'POST', body: JSON.stringify({ username: $('#au', b).value, password: $('#aw', b).value }) });
+      S.admin = r.token; store.set('bc_admin', S.admin);
+      closeDlg(); await openAdminPanel();
+    } catch (err) { toast(err.message, true); }
+  };
+}
+
+async function openAdminPanel() {
+  if (!S.admin) return openAdminLogin();
+  try {
+    const accounts = await api('/admin/accounts');
+    const b = openDlg(`<h2>Admin · Accounts</h2>
+      <p class="muted small">${accounts.length} registered account${accounts.length === 1 ? '' : 's'}</p>
+      <div style="max-height:55vh;overflow:auto">
+        ${accounts.map(a => `<div class="card" style="margin:8px 0"><b>${esc(a.name)}</b> · ${esc(KIND[a.kind]?.label || a.kind)}
+          <div class="hint">${esc(a.phone)} · ${esc(a.address || '')}<br>${a.listing_count} listings · ${a.claim_count} claims · ID ${esc(a.id)}</div>
+          <button class="btn danger sm" data-delete="${esc(a.id)}" data-name="${esc(a.name)}">Delete account</button></div>`).join('') || '<p class="muted">No accounts.</p>'}
+      </div>
+      <p style="text-align:right"><button class="btn ghost sm" id="cx">Close</button></p>`);
+    $('#cx', b).onclick = closeDlg;
+    $$('[data-delete]', b).forEach(btn => btn.onclick = async () => {
+      if (!confirm(`Delete ${btn.dataset.name} and their listings and claims?`)) return;
+      try {
+        await api('/admin/accounts/' + encodeURIComponent(btn.dataset.delete), { method: 'DELETE' });
+        toast('Account deleted'); await openAdminPanel();
+      } catch (err) { toast(err.message, true); }
+    });
+  } catch (err) {
+    if (err.message.includes('Admin login')) { S.admin = null; store.del('bc_admin'); openAdminLogin(); }
+    else toast(err.message, true);
+  }
 }
 
 /* ------------------------------------------------------------ tabs */

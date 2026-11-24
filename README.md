@@ -32,4 +32,6 @@ Shelf-life values are guidance only. Always check smell, look and texture before
 
 ## Accounts and sharing data between phones
 Accounts use mobile number + password (stored hashed). Data lives on the server, so all phones share it and the app refreshes itself every 15 seconds.
+Mobile numbers must be valid Indian 10-digit numbers. OTP signup/login is available with optional Twilio SMS configuration.
+The admin login lets a configured administrator view accounts and delete fraudulent accounts and their listings/claims.
 See `DEPLOY.md` to put the server online (free laptop tunnel, PythonAnywhere, or a host with a persistent disk).

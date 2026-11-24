@@ -68,6 +68,13 @@ CREATE TABLE IF NOT EXISTS claims (
 );
 CREATE INDEX IF NOT EXISTS idx_claims_listing ON claims(listing_id);
 CREATE INDEX IF NOT EXISTS idx_claims_org ON claims(org_id);
+
+CREATE TABLE IF NOT EXISTS otp_requests (
+    phone_key  TEXT PRIMARY KEY,
+    code_hash  TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    attempts   INTEGER NOT NULL DEFAULT 0
+);
 """
 
 
